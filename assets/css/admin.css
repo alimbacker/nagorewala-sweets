@@ -99,14 +99,18 @@ button{cursor:pointer;background:none;border:0}
 .ad-error{color:var(--danger);font-size:.85rem;font-weight:600;min-height:1em}
 
 .ad-toast{position:fixed;left:50%;bottom:24px;z-index:50;transform:translate(-50%,16px);max-width:min(520px,calc(100% - 32px));padding:12px 18px;border-radius:10px;background:var(--deep);color:#fff;font-size:.9rem;box-shadow:0 16px 40px -16px rgba(18,10,38,.6);opacity:0;pointer-events:none;transition:opacity .25s,transform .25s}
-.ad-toast.show{opacity:1;transform:translate(-50%,0)}
+.ad-toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.ad-toast-btn{margin-left:10px;padding:4px 12px;border-radius:999px;background:#fff;color:var(--brand);font-weight:700;font-size:.82rem}
+.ad-row-actions{display:flex;gap:6px}
+.ad-btn.ad-del{color:var(--danger)}
+.ad-btn.ad-del:hover{border-color:var(--danger);background:#FEF3F2}
 
 @media (max-width:640px){
   .ad-top{padding:10px 14px}
   .ad-status{width:100%;order:-1}
   .ad-wrap{padding:16px 14px}
   .ad-item{grid-template-columns:auto 48px 1fr auto;gap:10px}
-  .ad-item .ad-edit{grid-column:3 / -1;justify-self:start}
+  .ad-item .ad-row-actions{grid-column:3 / -1;justify-self:start}
   .ad-thumb{width:48px;height:48px}
   .ad-row{grid-template-columns:1fr}
   .ad-photo{flex-direction:column;align-items:flex-start}

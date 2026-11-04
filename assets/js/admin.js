@@ -173,8 +173,15 @@
   /* ---------- status, toast, draft ---------- */
   const toastEl = $('#toast');
   let toastTimer = 0;
-  function toast(msg, ms = 3200) {
-    toastEl.textContent = msg; toastEl.classList.add('show');
+  function toast(msg, ms = 3200, action) {
+    toastEl.textContent = msg;
+    if (action) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'ad-toast-btn'; b.textContent = action.label;
+      b.addEventListener('click', () => { toastEl.classList.remove('show'); action.run(); });
+      toastEl.append(' ', b);
+    }
+    toastEl.classList.add('show');
     clearTimeout(toastTimer); toastTimer = setTimeout(() => toastEl.classList.remove('show'), ms);
   }
   function keepDraft() {
@@ -250,13 +257,17 @@
         ${thumb(it)}
         <span class="ad-name"><b>${esc(it.n)}</b>${it.tag ? `<span class="ad-tag">${esc(it.tag)}</span>` : ''}${it.img && it.img.startsWith('data:') ? '<span class="ad-tag ad-new">New photo</span>' : ''}${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</span>
         <span class="ad-price">${fmt(it.p)}<small>${fmt(it.p / 2)} for ½ kg</small></span>
-        <button type="button" class="ad-btn ghost ad-edit" data-edit="${i}">Edit</button>
+        <span class="ad-row-actions">
+          <button type="button" class="ad-btn ghost ad-edit" data-edit="${i}">Edit</button>
+          <button type="button" class="ad-btn ghost ad-del" data-del="${i}" aria-label="Delete ${esc(it.n)}">Delete</button>
+        </span>
       </li>`).join('');
     $('#itemEmpty').hidden = shown.length > 0;
     $('#btnAdd').textContent = tab === 'savouries' ? '+ Add savoury' : '+ Add sweet';
   }
   list.addEventListener('click', (e) => {
-    const mv = e.target.closest('[data-move]'), ed = e.target.closest('[data-edit]');
+    const mv = e.target.closest('[data-move]'), ed = e.target.closest('[data-edit]'), del = e.target.closest('[data-del]');
+    if (del) deleteItem(tab, +del.dataset.del);
     if (mv) {
       const arr = data.menu[tab], i = +mv.dataset.i, j = i + +mv.dataset.move;
       if (j < 0 || j >= arr.length) return;
@@ -337,14 +348,19 @@
     markDirty();
     toast(self ? `${n} updated. Click Save changes to publish.` : `${n} added. Click Save changes to publish.`);
   });
-  $('#btnDelete').addEventListener('click', () => {
-    const it = data.menu[editing.cat][editing.index];
-    if (!confirm(`Delete ${it.n} from the menu?`)) return;
-    data.menu[editing.cat].splice(editing.index, 1);
-    dlg.close();
+  /* delete from the list or the editor; Undo puts it back where it was */
+  function deleteItem(cat, index) {
+    const it = data.menu[cat][index];
+    if (!it || !confirm(`Delete ${it.n} from the menu?`)) return false;
+    data.menu[cat].splice(index, 1);
     markDirty();
-    toast(`${it.n} deleted. Click Save changes to publish.`);
-  });
+    toast(`${it.n} deleted. Click Save changes to publish.`, 7000, {
+      label: 'Undo',
+      run: () => { data.menu[cat].splice(Math.min(index, data.menu[cat].length), 0, it); markDirty(); toast(`${it.n} is back.`); },
+    });
+    return true;
+  }
+  $('#btnDelete').addEventListener('click', () => { if (deleteItem(editing.cat, editing.index)) dlg.close(); });
 
   /* ---------- kitchen gallery ---------- */
   const gal = $('#galList');
@@ -427,6 +443,13 @@
       btn.textContent = 'Publishing…';
       const dataBlob = await gh(repoPath('/git/blobs'), { method: 'POST', body: JSON.stringify({ content: serialise(out), encoding: 'utf-8' }) });
       tree.push({ path: DATA_PATH, mode: '100644', type: 'blob', sha: dataBlob.sha });
+
+      /* uploaded photos no longer used by any sweet or kitchen photo are removed (built-in photos are kept) */
+      const used = new Set([...out.menu.sweets, ...out.menu.savouries].map((it) => it.img).concat(out.gallery.map((g) => g.src)));
+      const before = [...original.menu.sweets, ...original.menu.savouries].map((it) => it.img).concat(original.gallery.map((g) => g.src));
+      for (const path of new Set(before)) {
+        if (path && path.startsWith('assets/img/uploads/') && !used.has(path)) tree.push({ path, mode: '100644', type: 'blob', sha: null });
+      }
 
       const ref = await gh(repoPath(`/git/ref/heads/${REPO.branch}`));
       const head = await gh(repoPath(`/git/commits/${ref.object.sha}`));
