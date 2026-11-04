@@ -120,3 +120,10 @@ button{cursor:pointer;background:none;border:0}
 .ad-auth-card .ad-btn{min-height:46px;margin-top:4px}
 .ad-auth-card .ad-link{align-self:center}
 .ad-inline{display:inline}
+.ad-check{display:flex;gap:8px;align-items:flex-start;font-size:.82rem;color:var(--muted)}
+.ad-check input{margin-top:3px;accent-color:var(--brand)}
+.ad-help{font-size:.82rem;color:var(--muted);border-top:1px solid var(--line);padding-top:12px}
+.ad-help summary{cursor:pointer;font-weight:700;color:var(--brand)}
+.ad-help ol{margin:10px 0 0 18px;display:flex;flex-direction:column;gap:6px}
+.ad-help a{color:var(--brand)}
+.ad-loading{opacity:.6;pointer-events:none}

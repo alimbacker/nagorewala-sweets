@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; connect-src https://api.github.com data:; base-uri 'self'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<base href="../">
+<title>Nagorewala Admin</title>
+<link rel="icon" href="assets/img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/admin.css">
+</head>
+<body>
+
+<!-- connect -->
+<main class="ad-auth" id="login">
+  <form class="ad-auth-card" id="loginForm" novalidate>
+    <img src="assets/img/logo.png" alt="" width="72" height="74">
+    <h1>Nagorewala admin</h1>
+    <p class="ad-hint">Changes are saved to the website's GitHub repository. Paste the shop's GitHub access key to start.</p>
+    <label class="ad-field"><span>GitHub access key</span><input type="password" id="tokenInput" autocomplete="off" spellcheck="false" required placeholder="github_pat_…"></label>
+    <label class="ad-check"><input type="checkbox" id="remember" checked> Remember on this device (only on your own phone or computer)</label>
+    <p class="ad-error" id="loginError" role="alert"></p>
+    <button class="ad-btn primary" type="submit" id="loginBtn">Connect</button>
+    <details class="ad-help">
+      <summary>How to get an access key</summary>
+      <ol>
+        <li>Sign in to GitHub as <b>alimbacker</b> and open <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Settings → Developer settings → Fine-grained tokens → Generate new token</a>.</li>
+        <li>Name it "Nagorewala admin" and pick an expiry date.</li>
+        <li>Under <b>Repository access</b> choose <b>Only select repositories</b> → <b>nagorewala-sweets</b>.</li>
+        <li>Under <b>Permissions → Repository permissions</b> set <b>Contents</b> to <b>Read and write</b>.</li>
+        <li>Click <b>Generate token</b>, copy it and paste it above. Keep it private, like a password.</li>
+      </ol>
+    </details>
+    <a class="ad-link" href="./">Back to the website</a>
+  </form>
+</main>
+
+<!-- editor -->
+<div id="app" hidden>
+<header class="ad-top">
+  <div class="ad-brand">
+    <img src="assets/img/logo.png" alt="" width="40" height="41">
+    <div><b>Nagorewala</b><small>Website admin</small></div>
+  </div>
+  <div class="ad-actions">
+    <span class="ad-status" id="status" role="status">All saved</span>
+    <a class="ad-btn ghost" id="btnPreview" href="index.html?preview" target="_blank" rel="noopener">Preview</a>
+    <button type="button" class="ad-btn primary" id="btnSave">Save changes</button>
+    <button type="button" class="ad-btn ghost" id="btnLogout">Disconnect</button>
+  </div>
+</header>
+
+<div class="ad-wrap">
+  <p class="ad-note">Click <b>Save changes</b> to publish. The website shows the update within a few minutes. Use <b>Preview</b> to check first.</p>
+
+  <nav class="ad-tabs" role="tablist" aria-label="Sections">
+    <button type="button" role="tab" class="is-on" data-tab="sweets" aria-selected="true">Sweets <span data-count="sweets"></span></button>
+    <button type="button" role="tab" data-tab="savouries" aria-selected="false">Savouries <span data-count="savouries"></span></button>
+    <button type="button" role="tab" data-tab="gallery" aria-selected="false">Kitchen photos <span data-count="gallery"></span></button>
+  </nav>
+
+  <section id="paneMenu">
+    <div class="ad-toolbar">
+      <input type="search" id="search" placeholder="Search by name" aria-label="Search sweets">
+      <button type="button" class="ad-btn primary" id="btnAdd">+ Add sweet</button>
+    </div>
+    <ul class="ad-list" id="itemList"></ul>
+    <p class="ad-empty" id="itemEmpty" hidden>Nothing here yet. Add your first item.</p>
+  </section>
+
+  <section id="paneGallery" hidden>
+    <div class="ad-toolbar">
+      <p class="ad-hint">These photos appear in the "From our kitchen" section. Landscape or portrait both work; they are cropped to 4:5.</p>
+      <label class="ad-btn primary ad-file">+ Add photos<input type="file" id="galInput" accept="image/jpeg,image/png,image/webp" multiple></label>
+    </div>
+    <ul class="ad-grid" id="galList"></ul>
+    <p class="ad-empty" id="galEmpty" hidden>No kitchen photos yet.</p>
+  </section>
+</div>
+</div>
+
+<dialog class="ad-dlg" id="itemDlg" aria-labelledby="dlgTitle">
+  <form method="dialog" id="itemForm" novalidate>
+    <header><h2 id="dlgTitle">Add sweet</h2><button type="button" class="ad-x" data-close aria-label="Close">×</button></header>
+    <div class="ad-dlg-body">
+      <div class="ad-photo">
+        <div class="ad-photo-view" id="photoView"></div>
+        <div class="ad-photo-actions">
+          <label class="ad-btn ghost ad-file">Upload photo<input type="file" id="photoInput" accept="image/jpeg,image/png,image/webp"></label>
+          <button type="button" class="ad-link" id="photoRemove">Remove photo</button>
+          <p class="ad-hint">Square photos look best. It is shown as a circle on the menu and in the sweet box.</p>
+        </div>
+      </div>
+      <label class="ad-field"><span>Name *</span><input name="n" maxlength="40" required autocomplete="off"></label>
+      <div class="ad-row">
+        <label class="ad-field"><span>Category</span>
+          <select name="cat"><option value="sweets">Sweets</option><option value="savouries">Savouries</option></select></label>
+        <label class="ad-field"><span>Price for 1 kg (₹) *</span><input name="p" type="number" min="1" max="100000" step="1" inputmode="numeric" required></label>
+      </div>
+      <p class="ad-hint" id="halfPrice"></p>
+      <div class="ad-row">
+        <label class="ad-field"><span>Other name <em>(optional)</em></span><input name="sub" maxlength="40" placeholder="e.g. Athipala Halwa" autocomplete="off"></label>
+        <label class="ad-field"><span>Label</span>
+          <select name="tag"><option value="">None</option><option>Signature</option><option>Popular</option><option>New</option></select></label>
+      </div>
+      <label class="ad-field ad-colour"><span>Colour if there is no photo</span><input name="c" type="color" value="#c48a22"></label>
+      <p class="ad-error" id="formError" role="alert"></p>
+    </div>
+    <footer>
+      <button type="button" class="ad-link danger" id="btnDelete">Delete</button>
+      <span></span>
+      <button type="button" class="ad-btn ghost" data-close>Cancel</button>
+      <button type="submit" class="ad-btn primary">Save</button>
+    </footer>
+  </form>
+</dialog>
+
+<div class="ad-toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="assets/js/admin.js"></script>
+</body>
+</html>

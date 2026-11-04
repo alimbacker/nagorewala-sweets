@@ -1,41 +1,100 @@
-/* Nagorewala admin: edits the menu and kitchen photos, saved to the website through admin/api.php. */
+/* Nagorewala admin: edits the menu and kitchen photos and publishes them by committing
+   assets/js/data.js (and new photos) to the website's GitHub repository. */
 (() => {
+  const REPO = { owner: 'alimbacker', name: 'nagorewala-sweets', branch: 'main' };
+  const GH = 'https://api.github.com';
+  const DATA_PATH = 'assets/js/data.js';
+  const TOKEN_KEY = 'nagorewala-gh-key';
+  const DRAFT = 'nagorewala-admin-draft';
+
   const $ = (s, el = document) => el.querySelector(s);
   const $$ = (s, el = document) => [...el.querySelectorAll(s)];
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
   const fmt = (v) => '₹' + Math.round(v).toLocaleString('en-IN');
-  const DRAFT = 'nagorewala-admin-draft';
   const clone = (o) => JSON.parse(JSON.stringify(o));
-  const API = $('meta[name="nw-api"]').content;
-  const CSRF = $('meta[name="nw-csrf"]').content;
+  const store = (k, v, persist) => { try { (persist ? localStorage : sessionStorage).setItem(k, v); } catch (e) { /* storage blocked */ } };
+  const read = (k) => { try { return sessionStorage.getItem(k) || localStorage.getItem(k); } catch (e) { return null; } };
+  const forget = (k) => { try { sessionStorage.removeItem(k); localStorage.removeItem(k); } catch (e) { /* storage blocked */ } };
 
-  let original = clone(window.NAGOREWALA_DATA || { menu: { sweets: [], savouries: [] }, gallery: [] });
-  let data = clone(original);
+  let token = read(TOKEN_KEY);
+  let original = null, data = null, dataSha = null;
   let dirty = false, tab = 'sweets', editing = null;
+  /* photos just published: show them from memory until GitHub Pages has rebuilt */
+  const justSaved = new Map();
+  const shown = (src) => justSaved.get(src) || src;
 
-  /* resume an unsaved draft from this browser */
-  try {
-    const draft = JSON.parse(localStorage.getItem(DRAFT));
-    if (draft && draft.menu && JSON.stringify(draft) !== JSON.stringify(original)
-      && confirm('You have unsaved changes from last time. Continue with them?\n\nChoose Cancel to start from the live website.')) {
-      data = draft; dirty = true;
-    }
-  } catch (e) { /* no draft */ }
-
-  /* ---------- server ---------- */
-  async function api(action, body) {
-    const headers = { 'X-CSRF-Token': CSRF };
-    if (!(body instanceof FormData)) headers['Content-Type'] = 'application/json';
-    const res = await fetch(`${API}?action=${action}`, { method: 'POST', headers, body: body instanceof FormData ? body : JSON.stringify(body), credentials: 'same-origin' });
+  /* ---------- GitHub ---------- */
+  async function gh(path, opts = {}) {
+    const res = await fetch(GH + path, {
+      ...opts,
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+        ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
+      },
+      cache: 'no-store',
+    });
     const json = await res.json().catch(() => ({}));
-    if (res.status === 401) {
-      try { localStorage.setItem(DRAFT, JSON.stringify(data)); } catch (e) { /* too large */ }
-      alert(json.error || 'Please log in again. Your changes are kept in this browser.');
-      location.reload();
-    }
-    if (!res.ok || !json.ok) throw new Error(json.error || `The server said ${res.status}.`);
+    if (res.status === 401) throw Object.assign(new Error('GitHub did not accept the access key. It may have expired. Please connect again.'), { auth: true });
+    if (res.status === 403 || res.status === 404) throw Object.assign(new Error('This access key cannot edit the nagorewala-sweets repository. Check that it has Contents: Read and write for that repository.'), { auth: true });
+    if (!res.ok) throw Object.assign(new Error(json.message || `GitHub said ${res.status}.`), { status: res.status });
     return json;
   }
+  const repoPath = (p) => `/repos/${REPO.owner}/${REPO.name}${p}`;
+  const decode = (b64) => new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\s/g, '')), (c) => c.charCodeAt(0)));
+
+  async function loadData() {
+    const file = await gh(repoPath(`/contents/${DATA_PATH}?ref=${REPO.branch}`));
+    const text = decode(file.content);
+    const parsed = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
+    if (!parsed || !parsed.menu) throw new Error('The menu file in the repository could not be read.');
+    return { parsed, sha: file.sha };
+  }
+
+  /* ---------- connect / disconnect ---------- */
+  const loginForm = $('#loginForm');
+  async function start() {
+    $('#loginBtn').textContent = 'Connecting…';
+    loginForm.classList.add('ad-loading');
+    try {
+      const { parsed, sha } = await loadData();
+      original = parsed; dataSha = sha; data = clone(parsed);
+      try {
+        const draft = JSON.parse(read(DRAFT));
+        if (draft && draft.menu && JSON.stringify(draft) !== JSON.stringify(original)
+          && confirm('You have unsaved changes from last time. Continue with them?\n\nChoose Cancel to start from the live website.')) {
+          data = draft; dirty = true;
+        }
+      } catch (e) { /* no draft */ }
+      $('#login').hidden = true;
+      $('#app').hidden = false;
+      render();
+    } catch (e) {
+      if (e.auth) { forget(TOKEN_KEY); token = null; }
+      $('#loginError').textContent = e.message;
+      $('#login').hidden = false;
+      $('#app').hidden = true;
+    } finally {
+      $('#loginBtn').textContent = 'Connect';
+      loginForm.classList.remove('ad-loading');
+    }
+  }
+  loginForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const key = $('#tokenInput').value.trim();
+    if (!/^(github_pat_|ghp_)[A-Za-z0-9_]{20,}$/.test(key)) { $('#loginError').textContent = 'That does not look like a GitHub access key. It starts with github_pat_.'; return; }
+    token = key;
+    store(TOKEN_KEY, key, $('#remember').checked);
+    $('#tokenInput').value = '';
+    $('#loginError').textContent = '';
+    start();
+  });
+  $('#btnLogout').addEventListener('click', () => {
+    if (dirty && !confirm('You have unsaved changes. Disconnect anyway? They stay saved in this browser.')) return;
+    forget(TOKEN_KEY); token = null; dirty = false;
+    location.reload();
+  });
 
   /* ---------- status, toast, draft ---------- */
   const toastEl = $('#toast');
@@ -94,7 +153,7 @@
   /* ---------- menu list ---------- */
   const list = $('#itemList');
   function thumb(it) {
-    return `<span class="ad-thumb" style="--c:${/^#[0-9a-f]{3,8}$/i.test(it.c || '') ? it.c : '#c48a22'}">${it.img ? `<img src="${esc(it.img)}" alt="">` : ''}</span>`;
+    return `<span class="ad-thumb" style="--c:${/^#[0-9a-f]{3,8}$/i.test(it.c || '') ? it.c : '#c48a22'}">${it.img ? `<img src="${esc(shown(it.img))}" alt="">` : ''}</span>`;
   }
   function render() {
     renderStatus();
@@ -140,7 +199,7 @@
   let draftImg = null;
   function showPhoto(colour) {
     photoView.style.setProperty('--c', colour);
-    photoView.innerHTML = draftImg ? `<img src="${esc(draftImg)}" alt="">` : '';
+    photoView.innerHTML = draftImg ? `<img src="${esc(shown(draftImg))}" alt="">` : '';
     $('#photoRemove').hidden = !draftImg;
   }
   function updateHalf() {
@@ -218,7 +277,7 @@
   function renderGallery() {
     gal.innerHTML = data.gallery.map((g, i) => `
       <li class="ad-gcard">
-        <img src="${esc(g.src)}" alt="${esc(g.alt || g.caption)}">
+        <img src="${esc(shown(g.src))}" alt="${esc(g.alt || g.caption)}">
         <input type="text" value="${esc(g.caption)}" data-cap="${i}" maxlength="60" placeholder="Caption (optional)" aria-label="Caption for photo ${i + 1}">
         <div class="ad-gbar">
           <button type="button" data-gmove="-1" data-i="${i}" aria-label="Move photo ${i + 1} earlier" ${i === 0 ? 'disabled' : ''}>◀</button>
@@ -257,38 +316,58 @@
     if (added) { markDirty(); toast(`${added} photo${added > 1 ? 's' : ''} added. Add a caption if you like.`); }
   });
 
-  /* ---------- save: upload new photos, then the menu ---------- */
-  async function upload(dataUrl, kind, name) {
-    const fd = new FormData();
-    fd.append('photo', await (await fetch(dataUrl)).blob(), 'photo');
-    fd.append('kind', kind);
-    fd.append('name', name);
-    return (await api('upload', fd)).path;
+  /* ---------- save: one commit with data.js and any new photos ---------- */
+  const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'photo';
+  const extOf = (dataUrl) => (dataUrl.startsWith('data:image/webp') ? 'webp' : dataUrl.startsWith('data:image/png') ? 'png' : 'jpg');
+  const rand = () => Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => b.toString(16).padStart(2, '0')).join('');
+  function serialise(d) {
+    return '/* Nagorewala Sweets: site content (menu and kitchen gallery).\n   Managed from /admin/. Prices are per 1 kg; ½ kg is half. */\n'
+      + 'window.NAGOREWALA_DATA = ' + JSON.stringify(d, null, 2) + ';\n';
   }
   $('#btnSave').addEventListener('click', async () => {
     if (!dirty) { toast('Nothing to save. Everything is already live.'); return; }
     const btn = $('#btnSave');
     btn.disabled = true;
     try {
+      btn.textContent = 'Checking…';
+      const current = await gh(repoPath(`/contents/${DATA_PATH}?ref=${REPO.branch}`));
+      if (current.sha !== dataSha) throw new Error('The menu was changed somewhere else since you opened the admin. Reload the page to get the latest; your changes stay saved in this browser.');
+
       const out = clone(data);
       const pending = [];
-      for (const cat of ['sweets', 'savouries']) for (const it of out.menu[cat]) if (it.img && it.img.startsWith('data:')) pending.push(['sweet', it, 'img', it.n]);
-      for (const g of out.gallery) if (g.src.startsWith('data:')) pending.push(['gallery', g, 'src', g.caption || 'kitchen']);
+      for (const cat of ['sweets', 'savouries']) for (const it of out.menu[cat]) if (it.img && it.img.startsWith('data:')) pending.push([it, 'img', it.n, true]);
+      for (const g of out.gallery) if (g.src.startsWith('data:')) pending.push([g, 'src', g.caption || 'kitchen', false]);
+
+      const tree = [];
       let done = 0;
-      for (const [kind, obj, key, name] of pending) {
+      for (const [obj, key, name, isSweet] of pending) {
         btn.textContent = `Uploading photo ${++done} of ${pending.length}…`;
-        obj[key] = await upload(obj[key], kind, name);
-        if (kind === 'sweet') delete obj.sq;
+        const dataUrl = obj[key];
+        const blob = await gh(repoPath('/git/blobs'), { method: 'POST', body: JSON.stringify({ content: dataUrl.slice(dataUrl.indexOf(',') + 1), encoding: 'base64' }) });
+        const path = `assets/img/uploads/${slug(name)}-${rand()}.${extOf(dataUrl)}`;
+        tree.push({ path, mode: '100644', type: 'blob', sha: blob.sha });
+        obj[key] = path;
+        justSaved.set(path, dataUrl);
+        if (isSweet) delete obj.sq;
       }
-      btn.textContent = 'Saving…';
-      const res = await api('save', out);
-      data = res.data; original = clone(res.data);
+      btn.textContent = 'Publishing…';
+      const dataBlob = await gh(repoPath('/git/blobs'), { method: 'POST', body: JSON.stringify({ content: serialise(out), encoding: 'utf-8' }) });
+      tree.push({ path: DATA_PATH, mode: '100644', type: 'blob', sha: dataBlob.sha });
+
+      const ref = await gh(repoPath(`/git/ref/heads/${REPO.branch}`));
+      const head = await gh(repoPath(`/git/commits/${ref.object.sha}`));
+      const newTree = await gh(repoPath('/git/trees'), { method: 'POST', body: JSON.stringify({ base_tree: head.tree.sha, tree }) });
+      const commit = await gh(repoPath('/git/commits'), { method: 'POST', body: JSON.stringify({ message: 'Update menu from the admin page', tree: newTree.sha, parents: [ref.object.sha] }) });
+      await gh(repoPath(`/git/refs/heads/${REPO.branch}`), { method: 'PATCH', body: JSON.stringify({ sha: commit.sha, force: false }) });
+
+      data = out; original = clone(out); dataSha = dataBlob.sha;
       dirty = false;
-      localStorage.removeItem(DRAFT);
+      try { localStorage.removeItem(DRAFT); } catch (e) { /* storage blocked */ }
       render();
-      toast('Saved. The website now shows your changes.', 4500);
+      toast('Saved. The website shows your changes within a few minutes.', 6000);
     } catch (e) {
-      toast(`Not saved: ${e.message}`, 7000);
+      if (e.auth) { toast(e.message, 8000); forget(TOKEN_KEY); token = null; setTimeout(() => location.reload(), 2500); }
+      else toast(`Not saved: ${e.message}`, 8000);
     } finally {
       btn.disabled = false; btn.textContent = 'Save changes';
     }
@@ -297,20 +376,5 @@
   /* preview opens the website with this draft */
   $('#btnPreview').addEventListener('click', () => { if (!keepDraft()) toast('Large new photos only show in preview after saving.'); });
 
-  /* ---------- change password ---------- */
-  const pwDlg = $('#pwDlg'), pwForm = $('#pwForm');
-  $('#btnPassword').addEventListener('click', () => { pwForm.reset(); $('#pwError').textContent = ''; pwDlg.showModal(); });
-  pwForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const err = $('#pwError');
-    if (pwForm.new.value.length < 10) { err.textContent = 'The new password needs at least 10 characters.'; return; }
-    if (pwForm.new.value !== pwForm.confirm.value) { err.textContent = 'The two new passwords do not match.'; return; }
-    try {
-      await api('password', { current: pwForm.current.value, new: pwForm.new.value });
-      pwDlg.close();
-      toast('Password changed.');
-    } catch (ex) { err.textContent = ex.message; }
-  });
-
-  render();
+  if (token) start();
 })();
