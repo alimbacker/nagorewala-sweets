@@ -134,12 +134,6 @@ window.NAGOREWALA_DATA = {
         "c": "#f5b52e",
         "img": "assets/img/sweets/boondi.webp",
         "sq": "assets/img/sweets/boondi-sq.jpg"
-      },
-      {
-        "n": "alim",
-        "p": 350,
-        "c": "#c48a22",
-        "img": "assets/img/uploads/alim-05cfadca.webp"
       }
     ],
     "savouries": [
