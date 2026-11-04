@@ -21,9 +21,14 @@
   <form class="ad-auth-card" id="loginForm" novalidate>
     <img src="assets/img/logo.png" alt="" width="72" height="74">
     <h1>Nagorewala admin</h1>
-    <p class="ad-hint">Changes are saved to the website's GitHub repository. Paste the shop's GitHub access key to start.</p>
+    <p class="ad-hint">Changes are saved to the website's GitHub repository. Paste the shop's GitHub access key once, and choose a password to unlock the admin on this device next time.</p>
+    <input type="text" name="username" value="nagorewala-admin" autocomplete="username" hidden>
     <label class="ad-field"><span>GitHub access key</span><input type="password" id="tokenInput" autocomplete="off" spellcheck="false" required placeholder="github_pat_…"></label>
-    <label class="ad-check"><input type="checkbox" id="remember" checked> Remember on this device (only on your own phone or computer)</label>
+    <label class="ad-check"><input type="checkbox" id="remember" checked> Save the key on this device, locked with a password</label>
+    <div id="setPassword">
+      <label class="ad-field"><span>Admin password (at least 8 characters)</span><input type="password" id="newPass" minlength="8" autocomplete="new-password"></label>
+      <label class="ad-field"><span>Type it again</span><input type="password" id="newPass2" minlength="8" autocomplete="new-password"></label>
+    </div>
     <p class="ad-error" id="loginError" role="alert"></p>
     <button class="ad-btn primary" type="submit" id="loginBtn">Connect</button>
     <details class="ad-help">
@@ -40,6 +45,20 @@
   </form>
 </main>
 
+<!-- unlock (key saved on this device) -->
+<main class="ad-auth" id="unlock" hidden>
+  <form class="ad-auth-card" id="unlockForm" novalidate>
+    <img src="assets/img/logo.png" alt="" width="72" height="74">
+    <h1>Nagorewala admin</h1>
+    <input type="text" name="username" value="nagorewala-admin" autocomplete="username" hidden>
+    <label class="ad-field"><span>Password</span><input type="password" id="unlockPass" autocomplete="current-password" required></label>
+    <p class="ad-error" id="unlockError" role="alert"></p>
+    <button class="ad-btn primary" type="submit" id="unlockBtn">Log in</button>
+    <button type="button" class="ad-link" id="forgetKey">Forgot the password? Use the access key again</button>
+    <a class="ad-link" href="./">Back to the website</a>
+  </form>
+</main>
+
 <!-- editor -->
 <div id="app" hidden>
 <header class="ad-top">
@@ -51,7 +70,7 @@
     <span class="ad-status" id="status" role="status">All saved</span>
     <a class="ad-btn ghost" id="btnPreview" href="index.html?preview" target="_blank" rel="noopener">Preview</a>
     <button type="button" class="ad-btn primary" id="btnSave">Save changes</button>
-    <button type="button" class="ad-btn ghost" id="btnLogout">Disconnect</button>
+    <button type="button" class="ad-btn ghost" id="btnLogout">Log out</button>
   </div>
 </header>
 

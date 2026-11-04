@@ -4,7 +4,8 @@
   const REPO = { owner: 'alimbacker', name: 'nagorewala-sweets', branch: 'main' };
   const GH = 'https://api.github.com';
   const DATA_PATH = 'assets/js/data.js';
-  const TOKEN_KEY = 'nagorewala-gh-key';
+  const SESSION_KEY = 'nagorewala-gh-key';    // the key, for this browser tab while logged in
+  const VAULT = 'nagorewala-gh-vault';         // the key, encrypted with the admin password, on this device
   const DRAFT = 'nagorewala-admin-draft';
 
   const $ = (s, el = document) => el.querySelector(s);
@@ -12,16 +13,43 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
   const fmt = (v) => '₹' + Math.round(v).toLocaleString('en-IN');
   const clone = (o) => JSON.parse(JSON.stringify(o));
-  const store = (k, v, persist) => { try { (persist ? localStorage : sessionStorage).setItem(k, v); } catch (e) { /* storage blocked */ } };
   const read = (k) => { try { return sessionStorage.getItem(k) || localStorage.getItem(k); } catch (e) { return null; } };
-  const forget = (k) => { try { sessionStorage.removeItem(k); localStorage.removeItem(k); } catch (e) { /* storage blocked */ } };
+  const local = {
+    get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: (k, v) => { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } },
+    del: (k) => { try { localStorage.removeItem(k); } catch (e) { /* storage blocked */ } },
+  };
+  const session = {
+    set: (v) => { try { sessionStorage.setItem(SESSION_KEY, v); } catch (e) { /* storage blocked */ } },
+    del: () => { try { sessionStorage.removeItem(SESSION_KEY); } catch (e) { /* storage blocked */ } },
+  };
 
-  let token = read(TOKEN_KEY);
+  local.del(SESSION_KEY); /* earlier versions kept the key unencrypted on the device; never again */
+  let token = (() => { try { return sessionStorage.getItem(SESSION_KEY); } catch (e) { return null; } })();
   let original = null, data = null, dataSha = null;
   let dirty = false, tab = 'sweets', editing = null;
   /* photos just published: show them from memory until GitHub Pages has rebuilt */
   const justSaved = new Map();
   const shown = (src) => justSaved.get(src) || src;
+
+  /* ---------- the key, locked with the admin password (PBKDF2 + AES-GCM, Web Crypto) ---------- */
+  const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+  const unb64 = (str) => Uint8Array.from(atob(str), (c) => c.charCodeAt(0));
+  async function passwordKey(password, salt) {
+    const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 600000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  }
+  async function lockKey(key, password) {
+    const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await passwordKey(password, salt), new TextEncoder().encode(key));
+    return local.set(VAULT, JSON.stringify({ v: 1, salt: b64(salt), iv: b64(iv), ct: b64(ct) }));
+  }
+  async function unlockKey(password) {
+    const vault = JSON.parse(local.get(VAULT));
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(vault.iv) }, await passwordKey(password, unb64(vault.salt)), unb64(vault.ct));
+    return new TextDecoder().decode(pt);
+  }
+  const hasVault = () => !!local.get(VAULT);
 
   /* ---------- GitHub ---------- */
   async function gh(path, opts = {}) {
@@ -36,7 +64,7 @@
       cache: 'no-store',
     });
     const json = await res.json().catch(() => ({}));
-    if (res.status === 401) throw Object.assign(new Error('GitHub did not accept the access key. It may have expired. Please connect again.'), { auth: true });
+    if (res.status === 401) throw Object.assign(new Error('GitHub did not accept the access key. It may have expired. Please paste a new key.'), { auth: true });
     if (res.status === 403 || res.status === 404) throw Object.assign(new Error('This access key cannot edit the nagorewala-sweets repository. Check that it has Contents: Read and write for that repository.'), { perm: true });
     if (!res.ok) throw Object.assign(new Error(json.message || `GitHub said ${res.status}.`), { status: res.status });
     return json;
@@ -52,11 +80,18 @@
     return { parsed, sha: file.sha };
   }
 
-  /* ---------- connect / disconnect ---------- */
-  const loginForm = $('#loginForm');
-  async function start() {
-    $('#loginBtn').textContent = 'Connecting…';
-    loginForm.classList.add('ad-loading');
+  /* ---------- screens: connect (first time), log in (password), editor ---------- */
+  function showScreen(name) {
+    $('#login').hidden = name !== 'login';
+    $('#unlock').hidden = name !== 'unlock';
+    $('#app').hidden = name !== 'app';
+    const focus = { login: '#tokenInput', unlock: '#unlockPass' }[name];
+    if (focus) setTimeout(() => $(focus).focus(), 50);
+  }
+  function dropKey() { token = null; session.del(); }
+
+  /* loads the menu with the current key; returns true once the editor is open */
+  async function start(errorEl) {
     try {
       const { parsed, sha } = await loadData();
       original = parsed; dataSha = sha; data = clone(parsed);
@@ -67,32 +102,71 @@
           data = draft; dirty = true;
         }
       } catch (e) { /* no draft */ }
-      $('#login').hidden = true;
-      $('#app').hidden = false;
+      session.set(token);
+      showScreen('app');
       render();
+      return true;
     } catch (e) {
-      if (e.auth || e.perm) { forget(TOKEN_KEY); token = null; }
-      $('#loginError').textContent = e.message;
-      $('#login').hidden = false;
-      $('#app').hidden = true;
-    } finally {
-      $('#loginBtn').textContent = 'Connect';
-      loginForm.classList.remove('ad-loading');
+      dropKey();
+      if (e.auth) { local.del(VAULT); showScreen('login'); $('#loginError').textContent = e.message; }
+      else errorEl.textContent = e.message;
+      return false;
     }
   }
-  loginForm.addEventListener('submit', (e) => {
+  function busy(btn, label) {
+    const was = btn.textContent, form = btn.closest('form');
+    btn.textContent = label; form.classList.add('ad-loading');
+    return () => { btn.textContent = was; form.classList.remove('ad-loading'); };
+  }
+
+  /* first time on this device: access key + a new password */
+  $('#remember').addEventListener('change', (e) => { $('#setPassword').hidden = !e.target.checked; });
+  $('#loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const err = $('#loginError');
     const key = $('#tokenInput').value.trim();
-    if (!/^(github_pat_|ghp_)[A-Za-z0-9_]{20,}$/.test(key)) { $('#loginError').textContent = 'That does not look like a GitHub access key. It starts with github_pat_.'; return; }
+    const keep = $('#remember').checked, pass = $('#newPass').value;
+    err.textContent = '';
+    if (!/^(github_pat_|ghp_)[A-Za-z0-9_]{20,}$/.test(key)) { err.textContent = 'That does not look like a GitHub access key. It starts with github_pat_.'; return; }
+    if (keep && pass.length < 8) { err.textContent = 'Please choose a password of at least 8 characters.'; return; }
+    if (keep && pass !== $('#newPass2').value) { err.textContent = 'The two passwords do not match.'; return; }
+    const done = busy($('#loginBtn'), 'Connecting…');
     token = key;
-    store(TOKEN_KEY, key, $('#remember').checked);
-    $('#tokenInput').value = '';
-    $('#loginError').textContent = '';
-    start();
+    const ok = await start(err);
+    if (ok && keep && !(await lockKey(key, pass))) toast('This browser could not save the key, so you will need it again next time.', 6000);
+    if (ok) { $('#tokenInput').value = ''; $('#newPass').value = ''; $('#newPass2').value = ''; }
+    done();
+  });
+
+  /* next times: the password unlocks the saved key */
+  let wrongTries = 0;
+  $('#unlockForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const err = $('#unlockError');
+    err.textContent = '';
+    const done = busy($('#unlockBtn'), 'Checking…');
+    try {
+      token = await unlockKey($('#unlockPass').value);
+    } catch (ex) {
+      wrongTries++;
+      await new Promise((r) => setTimeout(r, Math.min(8000, 500 * 2 ** wrongTries)));
+      err.textContent = 'That password is not right.';
+      done();
+      return;
+    }
+    $('#unlockPass').value = '';
+    wrongTries = 0;
+    await start(err);
+    done();
+  });
+  $('#forgetKey').addEventListener('click', () => {
+    if (!confirm('This removes the saved key from this device. You will need the GitHub access key to set a new password. Continue?')) return;
+    local.del(VAULT); dropKey();
+    showScreen('login');
   });
   $('#btnLogout').addEventListener('click', () => {
-    if (dirty && !confirm('You have unsaved changes. Disconnect anyway? They stay saved in this browser.')) return;
-    forget(TOKEN_KEY); token = null; dirty = false;
+    if (dirty && !confirm('You have unsaved changes. Log out anyway? They stay saved in this browser.')) return;
+    dropKey(); dirty = false;
     location.reload();
   });
 
@@ -366,7 +440,7 @@
       render();
       toast('Saved. The website shows your changes within a few minutes.', 6000);
     } catch (e) {
-      if (e.auth) { toast(e.message, 8000); forget(TOKEN_KEY); token = null; setTimeout(() => location.reload(), 2500); }
+      if (e.auth) { toast(e.message, 8000); dropKey(); local.del(VAULT); dirty = false; setTimeout(() => location.reload(), 2500); }
       else toast(`Not saved: ${e.message}`, 8000);
     } finally {
       btn.disabled = false; btn.textContent = 'Save changes';
@@ -376,5 +450,6 @@
   /* preview opens the website with this draft */
   $('#btnPreview').addEventListener('click', () => { if (!keepDraft()) toast('Large new photos only show in preview after saving.'); });
 
-  if (token) start();
+  if (token) start($('#loginError')).then((ok) => { if (!ok && hasVault()) showScreen('unlock'); });
+  else showScreen(hasVault() ? 'unlock' : 'login');
 })();
