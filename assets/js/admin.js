@@ -37,7 +37,7 @@
     });
     const json = await res.json().catch(() => ({}));
     if (res.status === 401) throw Object.assign(new Error('GitHub did not accept the access key. It may have expired. Please connect again.'), { auth: true });
-    if (res.status === 403 || res.status === 404) throw Object.assign(new Error('This access key cannot edit the nagorewala-sweets repository. Check that it has Contents: Read and write for that repository.'), { auth: true });
+    if (res.status === 403 || res.status === 404) throw Object.assign(new Error('This access key cannot edit the nagorewala-sweets repository. Check that it has Contents: Read and write for that repository.'), { perm: true });
     if (!res.ok) throw Object.assign(new Error(json.message || `GitHub said ${res.status}.`), { status: res.status });
     return json;
   }
@@ -71,7 +71,7 @@
       $('#app').hidden = false;
       render();
     } catch (e) {
-      if (e.auth) { forget(TOKEN_KEY); token = null; }
+      if (e.auth || e.perm) { forget(TOKEN_KEY); token = null; }
       $('#loginError').textContent = e.message;
       $('#login').hidden = false;
       $('#app').hidden = true;
