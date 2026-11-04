@@ -414,8 +414,11 @@
     .to(['.hero-facts > div', '.hero-caption'], { y: 0, opacity: 1, duration: .8, stagger: .07 }, '-=.6');
 
   const load = gsap.timeline();
-  load.from('.loader-logo', { scale: .5, opacity: 0, duration: .7, ease: 'back.out(1.6)' })
-      .from(['.loader-ta', '.loader-en'], { y: 14, opacity: 0, duration: .5, stagger: .08, ease: 'power3.out' }, '-=.35')
+  const loaderName = $('.loader-name');
+  loaderName.innerHTML = [...loaderName.textContent].map((ch) => `<span>${ch}</span>`).join('');
+  load.from('.loader-logo', { scale: .4, rotate: -120, opacity: 0, duration: .9, ease: 'back.out(1.5)' })
+      .from('.loader-name span', { yPercent: 110, opacity: 0, duration: .55, stagger: .05, ease: 'power3.out' }, '-=.4')
+      .from('.loader-en', { y: 10, opacity: 0, duration: .5, ease: 'power3.out' }, '-=.25')
       .to('.loader-bar span', { scaleX: 1, duration: .8, ease: 'power2.inOut' }, '-=.25')
       .add(() => intro.play());
   setTimeout(() => { if (!loader.classList.contains('done')) { load.progress(1); intro.progress(1); } }, 5000);
