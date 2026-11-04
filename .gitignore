@@ -1,0 +1,11 @@
+# Working files (original photos, scripts) - not part of the website
+_src_zip/
+_src_live/
+_work/
+
+# PHP admin: holds the setup code and needs PHP hosting (GitHub Pages can't run it)
+admin/
+
+# Photos uploaded through the admin live on the PHP hosting
+assets/img/uploads/*
+!assets/img/uploads/.htaccess

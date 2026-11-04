@@ -1,0 +1,6 @@
+# The menu changes from /admin/, so browsers should check for a new copy.
+<IfModule mod_headers.c>
+  <Files "data.js">
+    Header set Cache-Control "no-cache"
+  </Files>
+</IfModule>
