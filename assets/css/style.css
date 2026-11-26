@@ -245,7 +245,15 @@ em{font-style:italic;color:var(--lav);font-weight:400}
 .bcard::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--brand);transform:scaleX(0);transform-origin:left;transition:transform .6s var(--ease)}
 .bcard:hover{transform:translateY(-6px);box-shadow:0 30px 60px -36px rgba(29,21,48,.4)}
 .bcard:hover::before{transform:scaleX(1)}
-.bcard-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px}
+.bcard-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.bcard-media{margin:-28px -26px 22px;aspect-ratio:4/3;overflow:hidden;background:var(--plum-900)}
+.bcard-media img{width:100%;height:100%;object-fit:cover;transition:transform 1s var(--ease)}
+.bcard:hover .bcard-media img{transform:scale(1.05)}
+/* branches without a photo yet: a branded panel in the same spot */
+.bcard-brand{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--lav-soft);background:radial-gradient(circle at 50% 40%,var(--brand),var(--plum-900) 75%)}
+.bcard-brand img{width:64px;height:auto;background:#fff;border-radius:50%;padding:4px;object-fit:contain}
+.bcard:hover .bcard-brand img{transform:rotate(-8deg) scale(1.06)}
+.bcard-brand span{font-family:var(--f-display);font-size:1.25rem;letter-spacing:.02em}
 .bcard-no{font-family:var(--f-display);font-size:.95rem;color:var(--muted)}
 .bcard-tag{font-size:.68rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;padding:6px 12px;border-radius:999px;background:var(--cream-2);color:var(--brand)}
 .bcard h3{font-family:var(--f-display);font-size:1.8rem;font-weight:400;letter-spacing:-.01em;margin-bottom:10px}
