@@ -453,8 +453,9 @@
   /* counters */
   $$('[data-count]').forEach((el) => {
     const o = { v: 0 };
-    el.textContent = '0';
-    gsap.to(o, { v: +el.dataset.count, duration: 1.8, ease: 'power2.out', scrollTrigger: { trigger: el, start: 'top 90%' }, onUpdate: () => (el.textContent = Math.round(o.v)) });
+    const suffix = el.dataset.suffix || '';
+    el.textContent = '0' + suffix;
+    gsap.to(o, { v: +el.dataset.count, duration: 1.8, ease: 'power2.out', scrollTrigger: { trigger: el, start: 'top 90%' }, onUpdate: () => (el.textContent = Math.round(o.v) + suffix) });
   });
 
   /* promise cards */
